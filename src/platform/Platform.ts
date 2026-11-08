@@ -143,6 +143,15 @@ class CrazyGamesPlatform extends WebPlatform {
   gameplayStart() { if (!this.inGameplay) try { this.sdk?.game.gameplayStart(); } catch { /* ignore */ } this.inGameplay = true; }
   gameplayStop() { if (this.inGameplay) try { this.sdk?.game.gameplayStop(); } catch { /* ignore */ } this.inGameplay = false; }
   happyTime() { try { this.sdk?.game.happytime(); } catch { /* ignore */ } }
+  /** CrazyGames site-wide mute (SDK v3 game settings): silence the game whenever the player mutes on CrazyGames. */
+  onAudioChange(cb: (enabled: boolean) => void) {
+    try {
+      const game = this.sdk?.game;
+      if (!game) return;
+      if (game.settings) cb(!game.settings.muteAudio);
+      game.addSettingsChangeListener?.((s: { muteAudio?: boolean }) => cb(!s?.muteAudio));
+    } catch { /* ignore */ }
+  }
   commercialBreak(): Promise<void> {
     if (!this.sdk) return Promise.resolve();
     this.gameplayStop();
