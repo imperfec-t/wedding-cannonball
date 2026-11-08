@@ -266,7 +266,7 @@ async function winLevel(p, id) {
   const portals = [
     { name: 'poki', sdk: /poki-sdk\.js/, mock: `window.__calls=[];const c=(n)=>(...a)=>{window.__calls.push(n);};window.PokiSDK={init:()=>{__calls.push('init');return Promise.resolve()},gameLoadingFinished:c('gameLoadingFinished'),gameplayStart:c('gameplayStart'),gameplayStop:c('gameplayStop'),commercialBreak:(f)=>{__calls.push('commercialBreak');f&&f();return Promise.resolve()},rewardedBreak:(f)=>{__calls.push('rewardedBreak');f&&f();return Promise.resolve(true)}};`,
       expect: ['init', 'gameLoadingFinished', 'gameplayStart', 'gameplayStop', 'commercialBreak', 'rewardedBreak'] },
-    { name: 'crazygames', sdk: /crazygames-sdk-v3\.js/, mock: `window.__calls=[];const store={};window.CrazyGames={SDK:{init:()=>{__calls.push('init');return Promise.resolve()},environment:'crazygames',game:{loadingStart:()=>__calls.push('loadingStart'),loadingStop:()=>__calls.push('loadingStop'),gameplayStart:()=>__calls.push('gameplayStart'),gameplayStop:()=>__calls.push('gameplayStop'),happytime:()=>__calls.push('happytime'),settings:{muteAudio:false},addSettingsChangeListener:(f)=>{window.__cgSettings=f;__calls.push('settingsListener')}},ad:{requestAd:(t,cb)=>{__calls.push('requestAd:'+t);cb.adStarted&&cb.adStarted();setTimeout(()=>cb.adFinished&&cb.adFinished(),50)}},data:{getItem:(k)=>store[k]||null,setItem:(k,v)=>{__calls.push('data.setItem');store[k]=v}}}};`,
+    { name: 'crazygames', sdk: /crazygames-sdk-v3\.js/, mock: `window.__calls=[];const store={};window.CrazyGames={SDK:{init:()=>{__calls.push('init');return Promise.resolve()},environment:'crazygames',game:{loadingStart:()=>__calls.push('loadingStart'),loadingStop:()=>__calls.push('loadingStop'),gameplayStart:()=>__calls.push('gameplayStart'),gameplayStop:()=>__calls.push('gameplayStop'),happytime:()=>__calls.push('happytime'),settings:{muteAudio:false},addSettingsChangeListener:(f)=>{window.__cgSettings=f;__calls.push('settingsListener')}},ad:{requestAd:(t,cb)=>{__calls.push('requestAd:'+t);if(t==='rewarded'&&window.__noFill){setTimeout(()=>cb.adError&&cb.adError('unfilled'),30);return;}cb.adStarted&&cb.adStarted();setTimeout(()=>cb.adFinished&&cb.adFinished(),50)}},data:{getItem:(k)=>store[k]||null,setItem:(k,v)=>{__calls.push('data.setItem');store[k]=v}}}};`,
       expect: ['init', 'loadingStart', 'loadingStop', 'gameplayStart', 'gameplayStop', 'requestAd:midgame', 'requestAd:rewarded', 'data.setItem', 'settingsListener'] },
     { name: 'youtube', sdk: /game_api\/v1/, mock: `window.__calls=[];let saved='';window.__yt={};window.ytgame={game:{firstFrameReady:()=>__calls.push('firstFrameReady'),gameReady:()=>__calls.push('gameReady'),saveData:(d)=>{__calls.push('saveData');saved=d;return Promise.resolve()},loadData:()=>{__calls.push('loadData');return Promise.resolve(saved)}},engagement:{sendScore:()=>{__calls.push('sendScore');return Promise.resolve()}},system:{isAudioEnabled:()=>true,onAudioEnabledChange:(f)=>{__yt.audio=f},onPause:(f)=>{__yt.pause=f},onResume:(f)=>{__yt.resume=f},getLanguage:()=>Promise.resolve('en')}};`,
       expect: ['loadData', 'firstFrameReady', 'gameReady', 'saveData', 'sendScore'] },
@@ -307,6 +307,22 @@ async function winLevel(p, id) {
       await p.waitForTimeout(1300); // the offer panel slides in after 0.7 s
       await p.mouse.click(640, 390);
       check(await until(p, () => window.__hcScene.state === 'aim' && window.__hcScene.launchesLeft === 1, null, 30000), 'watching the ad grants one more launch');
+      if (portal.name === 'crazygames') {
+        // Basic Launch / QA: the SDK has no ad to show. The player must still get the launch, not lose the level.
+        await game(p, () => { window.__noFill = true; const g = window.__hcGame; for (const k of ['Result', 'Pause']) if (g.scene.isActive(k)) g.scene.stop(k); g.scene.start('Game', { levelId: 3 }); });
+        await p.waitForTimeout(400);
+        for (let i = 0; i < 3; i++) {
+          await until(p, () => ['intro', 'aim'].includes(window.__hcScene.state), null, 40000);
+          await game(p, (last) => { window.__hcScene.testSteps = last ? 0 : 60; window.__hcScene.testLaunch(10, 0.12); }, i === 2);
+          await until(p, () => window.__hcScene.state !== 'flight', null, 40000);
+        }
+        await until(p, () => window.__hcScene.state === 'offer', null, 40000);
+        await p.waitForTimeout(1300);
+        await p.mouse.click(640, 390);
+        check(await until(p, () => window.__hcScene.state === 'aim' && window.__hcScene.launchesLeft === 1, null, 30000), 'no ad available (Basic Launch) → player still gets the bonus launch');
+        await game(p, () => { window.__noFill = false; window.__hcGame.scene.start('Game', { levelId: 2 }); });
+        await p.waitForTimeout(500);
+      }
     }
     if (portal.name === 'youtube') check(await game(p, () => !document.body.classList.contains('need-landscape')), 'YouTube build plays in portrait (no rotate block)');
     check(await game(p, () => { const t = window.__hcGame.scene.getScene('Title'); return !t || !t.children || true; }) && await game(p, () => !document.fullscreenElement), 'portal build does not force full screen');

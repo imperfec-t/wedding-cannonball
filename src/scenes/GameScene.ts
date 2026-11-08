@@ -470,20 +470,21 @@ export class GameScene extends Phaser.Scene {
     if (this.state !== 'offer') return;
     this.extraUsed = true;
     Analytics.track('rewarded_offer', { accepted: true });
-    const ok = await platform.rewardedBreak();
+    const result = await platform.rewardedBreak();
     if (!this.scene.isActive() || this.state !== 'offer') return;
-    if (!ok) {
-      // no ad was available (e.g. ads are off during CrazyGames Basic Launch): say so instead of failing silently
-      bus.emit('hud:toast', 'No ad available right now', 'Try again later');
+    if (result === 'skipped') {
+      // an ad started but the player closed it early: no reward
+      bus.emit('hud:toast', 'Ad closed early', 'No bonus launch this time');
       this.time.delayedCall(1400, () => this.levelFail());
       return;
     }
-    Analytics.track('rewarded_granted', { level: this.level.id });
+    // watched, or no ad could be shown at all (ads off, no fill, blocker): never punish the player for that
+    Analytics.track('rewarded_granted', { level: this.level.id, via: result });
     platform.gameplayStart();
     this.launchesLeft = 1;
     this.state = 'between';
     bus.emit('hud:launches', 1);
-    bus.emit('hud:toast', 'Bonus launch!', 'One more try');
+    bus.emit('hud:toast', 'Bonus launch!', result === 'watched' ? 'Thanks for watching!' : 'One more try');
     this.camTween = this.tweens.add({ targets: this.cam, x: this.aimCamX(), y: this.aimCamY(), zoom: this.fitZoom, duration: 600, ease: 'Sine.inOut', onComplete: () => this.enterAim() });
   }
 

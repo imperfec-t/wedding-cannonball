@@ -10,6 +10,8 @@ declare global {
   }
 }
 
+export type RewardResult = 'watched' | 'unavailable' | 'skipped';
+
 export interface Platform {
   name: string;
   /** Portal pages must not link out to other sites. */
@@ -30,8 +32,11 @@ export interface Platform {
   commercialBreak(): Promise<void>;
   /** True when the portal can show an opt-in rewarded ad. */
   hasRewarded(): boolean;
-  /** Opt-in rewarded ad. Resolves true only if the player watched it to the end. */
-  rewardedBreak(): Promise<boolean>;
+  /**
+   * Opt-in rewarded ad. 'watched' = played to the end; 'unavailable' = no ad could be shown (ads off,
+   * no fill, ad blocker, timeout); 'skipped' = an ad started but the player did not finish it.
+   */
+  rewardedBreak(): Promise<RewardResult>;
   happyTime(): void;
   sendScore(score: number): void;
   load(): Promise<string | null>;
@@ -79,7 +84,7 @@ class WebPlatform implements Platform {
   gameplayStop() { this.inGameplay = false; }
   async commercialBreak() {}
   hasRewarded() { return false; }
-  async rewardedBreak() { return false; }
+  async rewardedBreak(): Promise<RewardResult> { return 'unavailable'; }
   happyTime() {}
   sendScore(_score: number) {}
   async load() { return lsGet(); }
@@ -115,13 +120,13 @@ class PokiPlatform extends WebPlatform {
     resumeHooks.forEach((h) => h());
   }
   hasRewarded() { return this.ok && !!window.PokiSDK?.rewardedBreak; }
-  async rewardedBreak() {
-    if (!this.hasRewarded()) return false;
+  async rewardedBreak(): Promise<RewardResult> {
+    if (!this.hasRewarded()) return 'unavailable';
     this.gameplayStop();
-    let ok = false;
-    try { ok = !!(await window.PokiSDK.rewardedBreak(() => pauseHooks.forEach((h) => h()))); } catch { ok = false; }
+    let started = false, ok = false;
+    try { ok = !!(await window.PokiSDK.rewardedBreak(() => { started = true; pauseHooks.forEach((h) => h()); })); } catch { ok = false; }
     resumeHooks.forEach((h) => h());
-    return ok;
+    return ok ? 'watched' : started ? 'skipped' : 'unavailable';
   }
 }
 
@@ -167,18 +172,22 @@ class CrazyGamesPlatform extends WebPlatform {
     });
   }
   hasRewarded() { return !!this.sdk?.ad?.requestAd; }
-  rewardedBreak(): Promise<boolean> {
-    if (!this.sdk) return Promise.resolve(false);
+  rewardedBreak(): Promise<RewardResult> {
+    if (!this.sdk) return Promise.resolve('unavailable');
     this.gameplayStop();
     return new Promise((resolve) => {
-      const done = (ok: boolean) => { resumeHooks.forEach((h) => h()); resolve(ok); };
+      let settled = false, started = false;
+      const done = (r: RewardResult) => { if (settled) return; settled = true; resumeHooks.forEach((h) => h()); resolve(r); };
+      // if the SDK never answers (no ads in Basic Launch / QA, blocked), don't leave the player stuck
+      setTimeout(() => { if (!started) done('unavailable'); }, 8000);
       try {
         this.sdk.ad.requestAd('rewarded', {
-          adStarted: () => pauseHooks.forEach((h) => h()),
-          adFinished: () => done(true),
-          adError: () => done(false),
+          adStarted: () => { started = true; pauseHooks.forEach((h) => h()); },
+          adFinished: () => done('watched'),
+          // CrazyGames reports both "no ad" and "closed early" as adError; only treat it as skipped if an ad was actually showing
+          adError: () => done(started ? 'skipped' : 'unavailable'),
         });
-      } catch { done(false); }
+      } catch { done('unavailable'); }
     });
   }
   async load() {
