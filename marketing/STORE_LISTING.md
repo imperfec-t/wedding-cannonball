@@ -91,6 +91,7 @@ The more chaos you cause on the way, the more **Shaadi Damage** you score.
 | Languages | English, with Hinglish flavour text |
 | Age rating | Everyone / PEGI 3–7 (mild cartoon slapstick). See `legal/CONTENT_RATING.md` |
 | Data collection | None (see `legal/PRIVACY_POLICY.md`) |
+| AI disclosure | Yes. Code, code-drawn art, synthesised music and text were created with an AI coding assistant (Claude). |
 | Version | 1.0.0 |
 
 ## 8. Release notes: version 1.0.0

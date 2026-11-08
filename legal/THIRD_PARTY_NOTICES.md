@@ -1,7 +1,7 @@
 # Third-party notices and credits: Wedding Cannon: Shaadi Chaos
 
 ## Original work
-The game's code, characters, artwork (drawn in code with Canvas 2D), music (synthesised with Web Audio), level designs, text and most sound effects are original works of {{DEVELOPER_NAME}}. No AI-generated or third-party artwork is used.
+The game's code, characters, artwork (drawn in code with Canvas 2D), music (synthesised with Web Audio), level designs, text and most sound effects were created for {{DEVELOPER_NAME}} with the help of an AI coding assistant (Anthropic's Claude), which wrote the code that draws the art and plays the sounds. No third-party artwork or image libraries are used.
 
 ## Software included in the game
 
