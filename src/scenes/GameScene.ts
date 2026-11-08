@@ -472,7 +472,12 @@ export class GameScene extends Phaser.Scene {
     Analytics.track('rewarded_offer', { accepted: true });
     const ok = await platform.rewardedBreak();
     if (!this.scene.isActive() || this.state !== 'offer') return;
-    if (!ok) { this.levelFail(); return; }
+    if (!ok) {
+      // no ad was available (e.g. ads are off during CrazyGames Basic Launch): say so instead of failing silently
+      bus.emit('hud:toast', 'No ad available right now', 'Try again later');
+      this.time.delayedCall(1400, () => this.levelFail());
+      return;
+    }
     Analytics.track('rewarded_granted', { level: this.level.id });
     platform.gameplayStart();
     this.launchesLeft = 1;
